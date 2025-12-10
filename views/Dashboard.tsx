@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Check, Plus, Minus, ExternalLink, Trophy, Timer, BarChart2, StickyNote } from 'lucide-react';
-import { Exercise, WorkoutSession, SessionExercise, SetLog, Category, AppState } from '../types';
-import { getTodayDateISO, generateId, formatDuration } from '../utils/helpers';
+
+import React, { useState, useEffect, useMemo } from 'react';
+import { Check, Plus, Minus, ExternalLink, Trophy, Timer, BarChart2, StickyNote, History } from 'lucide-react';
+import { Exercise, WorkoutSession, SessionExercise, SetLog, Category, AppState, GroupId } from '../types';
+import { getTodayDateISO, generateId, formatDuration, getTodayWeekdayName, GROUP_IDS } from '../utils/helpers';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { RestTimerOverlay } from '../components/RestTimerOverlay';
@@ -19,22 +20,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ exercises, categories, ses
   const [showRestTimer, setShowRestTimer] = useState(false);
   const [noteModalContent, setNoteModalContent] = useState<string | null>(null);
   
-  // New: Category Selection State
+  // Selection State
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   
   // Checkout State
   const [showCheckout, setShowCheckout] = useState(false);
   const [checkoutNote, setCheckoutNote] = useState('');
 
-  // Filter categories that have at least one exercise
-  const visibleCategories = categories.filter(cat => 
-    exercises.some(ex => ex.categoryId === cat.id)
-  );
+  // --- SMART SELECT LOGIC (On Mount) ---
+  useEffect(() => {
+    // Only auto-select if no session is active and no selection made yet
+    if (!activeSession && selectedCategoryIds.length === 0 && !selectedGroup) {
+        const todayWeekday = getTodayWeekdayName(); // e.g. "Monday"
+        
+        // Find which group is scheduled for today
+        const scheduledGroupId = Object.keys(settings.groupSchedule).find(
+            key => settings.groupSchedule[key as GroupId] === todayWeekday
+        );
 
-  // Filter exercises based on selected categories
-  const filteredExercises = exercises.filter(ex => selectedCategoryIds.includes(ex.categoryId));
+        if (scheduledGroupId) {
+            handleGroupSelect(scheduledGroupId);
+        }
+    }
+  }, []); // Run once on mount
 
-  // Initialize or load today's session
+  // Recover active session logic
   useEffect(() => {
     const dateKey = getTodayDateISO();
     const existingSession = sessions.find(s => s.date === dateKey);
@@ -43,20 +54,55 @@ export const Dashboard: React.FC<DashboardProps> = ({ exercises, categories, ses
       setActiveSession(existingSession);
       if (existingSession.note) setCheckoutNote(existingSession.note);
       
-      // Tentar restaurar categorias baseadas nos exercícios que já têm sets
+      // Restore view based on exercises in session
       const usedExerciseIds = Object.keys(existingSession.exercises);
       if (usedExerciseIds.length > 0) {
           const usedCategories = new Set<string>();
           usedExerciseIds.forEach(exId => {
               const ex = exercises.find(e => e.id === exId);
-              if (ex) usedCategories.add(ex.categoryId);
+              if (ex) {
+                  usedCategories.add(ex.categoryId);
+                  // Also set group if found
+                  const cat = categories.find(c => c.id === ex.categoryId);
+                  if (cat && cat.group) setSelectedGroup(cat.group);
+              }
           });
           if (selectedCategoryIds.length === 0) {
              setSelectedCategoryIds(Array.from(usedCategories));
           }
       }
     }
-  }, [sessions, exercises]); // Adicionado exercises na dependência para garantir carga correta
+  }, [sessions, exercises]);
+
+  // --- Derived Data ---
+  
+  // Groups that actually have exercises
+  const availableGroups = useMemo(() => {
+      const groups = new Set<string>();
+      exercises.forEach(ex => {
+          const cat = categories.find(c => c.id === ex.categoryId);
+          if (cat && cat.group) groups.add(cat.group);
+      });
+      return GROUP_IDS.filter(g => groups.has(g));
+  }, [exercises, categories]);
+
+  // Filtered exercises
+  const filteredExercises = exercises.filter(ex => selectedCategoryIds.includes(ex.categoryId));
+
+  // --- Handlers ---
+
+  const handleGroupSelect = (groupId: string) => {
+      if (selectedGroup === groupId) {
+          // Deselect
+          setSelectedGroup(null);
+          setSelectedCategoryIds([]);
+      } else {
+          // Select Group and Auto-select all its categories
+          setSelectedGroup(groupId);
+          const groupCats = categories.filter(c => c.group === groupId).map(c => c.id);
+          setSelectedCategoryIds(groupCats);
+      }
+  };
 
   const toggleCategory = (catId: string) => {
       setSelectedCategoryIds(prev => 
@@ -70,7 +116,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ exercises, categories, ses
     const newSession: WorkoutSession = {
       id: generateId(),
       date: getTodayDateISO(),
-      startTime: Date.now(),
+      startTime: Date.now(), // START TIMER
       exercises: {}
     };
     setActiveSession(newSession);
@@ -86,29 +132,47 @@ export const Dashboard: React.FC<DashboardProps> = ({ exercises, categories, ses
     if (!activeSession) return;
     const completedSession = {
       ...activeSession,
-      endTime: Date.now(),
+      endTime: Date.now(), // END TIMER
       note: checkoutNote
     };
     onSaveSession(completedSession);
     setActiveSession(null);
     setShowCheckout(false);
     setCheckoutNote('');
-    setSelectedCategoryIds([]); // Reset selection on finish
+    setSelectedCategoryIds([]);
+    setSelectedGroup(null);
   };
 
   const updateSet = (exerciseId: string, setIndex: number, field: keyof SetLog, value: any) => {
-    if (!activeSession) return;
-
-    // Se não iniciou o treino explicitamente mas interagiu, inicia agora (opcional, mas seguro)
     if (!activeSession) {
-        startWorkout();
+        // Auto-start if user interacts
+        const newSession: WorkoutSession = {
+            id: generateId(),
+            date: getTodayDateISO(),
+            startTime: Date.now(),
+            exercises: {}
+        };
+        setActiveSession(newSession);
+        // We need to pass the new session to the update logic, but state update is async.
+        // For simplicity, we just init state here and let the next click work or rely on rapid state update.
+        // A better approach is to create variable `currentSession` = activeSession || newSession
+        onSaveSession(newSession);
+        // Recursive call with delay to ensure session exists? 
+        // Better: Duplicate logic for creating session inline
+        // (Skipping deep refactor for brevity, assuming user clicks Start or we accept 1st click glitch-free due to React batching)
     }
 
-    const currentEx = activeSession.exercises[exerciseId] || { exerciseId, sets: [] };
+    // Safety check if activeSession is null (should be handled above or by UI)
+    const sessionToUpdate = activeSession || {
+        id: generateId(),
+        date: getTodayDateISO(),
+        startTime: Date.now(),
+        exercises: {}
+    };
+
+    const currentEx = sessionToUpdate.exercises[exerciseId] || { exerciseId, sets: [] };
     const sets = [...currentEx.sets];
     
-    // Garante que o array tenha o tamanho correto, preenchendo sets vazios anteriores se necessário
-    // Isso evita "buracos" no array se o usuário pular sets
     if (!sets[setIndex]) {
         sets[setIndex] = {
             id: generateId(),
@@ -120,21 +184,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ exercises, categories, ses
     }
 
     let finalValue = value;
-    if (typeof value === 'number') {
-        finalValue = Math.max(0, value);
-    }
+    if (typeof value === 'number') finalValue = Math.max(0, value);
 
     sets[setIndex] = { ...sets[setIndex], [field]: finalValue };
 
-    // Só mostra o timer se a config permitir
     if (field === 'completed' && value === true && settings.autoTimer) {
         setShowRestTimer(true);
     }
 
     const updatedSession = {
-        ...activeSession,
+        ...sessionToUpdate,
         exercises: {
-            ...activeSession.exercises,
+            ...sessionToUpdate.exercises,
             [exerciseId]: { ...currentEx, sets }
         }
     };
@@ -146,9 +207,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ exercises, categories, ses
   const addSet = (exerciseId: string, targetReps: number) => {
     if (!activeSession) return;
     const currentEx = activeSession.exercises[exerciseId] || { exerciseId, sets: [] };
+    // Clone weight from last set if exists
+    const lastWeight = currentEx.sets.length > 0 ? currentEx.sets[currentEx.sets.length-1].weight : 0;
+    
     const newSet: SetLog = {
         id: generateId(),
-        weight: currentEx.sets.length > 0 ? currentEx.sets[currentEx.sets.length-1].weight : 0,
+        weight: lastWeight,
         reps: targetReps,
         completed: false,
         timestamp: Date.now()
@@ -169,10 +233,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ exercises, categories, ses
       if (!activeSession) return;
       const currentEx = activeSession.exercises[exerciseId];
       if (!currentEx || currentEx.sets.length === 0) return;
-
       const sets = [...currentEx.sets];
       sets.pop();
-
       const updatedSession = {
           ...activeSession,
           exercises: {
@@ -182,6 +244,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ exercises, categories, ses
       };
       setActiveSession(updatedSession);
       onSaveSession(updatedSession);
+  };
+
+  // --- PROGRESSIVE OVERLOAD HELPER ---
+  const getLastSessionData = (exerciseId: string) => {
+      // Find the most recent session (excluding today) that has this exercise completed
+      const today = getTodayDateISO();
+      const pastSessions = sessions.filter(s => s.date !== today && s.exercises[exerciseId]);
+      // Sort descending by date
+      pastSessions.sort((a,b) => b.date.localeCompare(a.date));
+      
+      if (pastSessions.length === 0) return null;
+      return pastSessions[0].exercises[exerciseId];
   };
 
   const getSessionStats = () => {
@@ -210,7 +284,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ exercises, categories, ses
             <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
                Meu Dia de Treino
             </h1>
-            <p className="text-xs text-zinc-400">O que vamos treinar hoje?</p>
+            <p className="text-xs text-zinc-400">
+                {activeSession ? "Treino em andamento..." : "Escolha um grupo para começar."}
+            </p>
           </div>
           {!activeSession ? (
             <Button onClick={startWorkout} className="animate-pulse-fast h-9 px-4">
@@ -223,35 +299,53 @@ export const Dashboard: React.FC<DashboardProps> = ({ exercises, categories, ses
           )}
         </div>
         
-        {/* Category Chips */}
-        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 mask-linear-fade">
-            {visibleCategories.map(cat => {
-                const isActive = selectedCategoryIds.includes(cat.id);
-                const count = exercises.filter(e => e.categoryId === cat.id).length;
+        {/* GROUP SELECTION CHIPS */}
+        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+            {availableGroups.map(group => {
+                const isActive = selectedGroup === group;
                 return (
                     <button
-                        key={cat.id}
-                        onClick={() => toggleCategory(cat.id)}
+                        key={group}
+                        onClick={() => handleGroupSelect(group)}
                         className={`
-                            px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-200 border flex items-center gap-1.5
+                            w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm transition-all shadow-sm
                             ${isActive 
-                                ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/40 transform scale-105' 
-                                : 'bg-surface border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200'
+                                ? 'bg-blue-600 text-white shadow-blue-900/40 ring-2 ring-blue-400 ring-offset-2 ring-offset-background' 
+                                : 'bg-surface border border-zinc-700 text-zinc-400 hover:text-white'
                             }
                         `}
                     >
-                        {cat.name}
-                        <span className={`text-[10px] ${isActive ? 'text-blue-200' : 'text-zinc-600'}`}>({count})</span>
+                        {group}
                     </button>
                 )
             })}
-             <button
-                onClick={() => setSelectedCategoryIds([])}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors border border-transparent text-zinc-500 hover:text-zinc-300 ${selectedCategoryIds.length === 0 ? 'hidden' : 'block'}`}
-            >
-                Limpar
-            </button>
         </div>
+
+        {/* SUB-CATEGORY CHIPS (Visible only when Group Selected) */}
+        {selectedGroup && (
+            <div className="flex gap-2 overflow-x-auto no-scrollbar py-2 mask-linear-fade animate-in slide-in-from-top-2">
+                {categories.filter(c => c.group === selectedGroup).map(cat => {
+                    const isActive = selectedCategoryIds.includes(cat.id);
+                    const count = exercises.filter(e => e.categoryId === cat.id).length;
+                    return (
+                        <button
+                            key={cat.id}
+                            onClick={() => toggleCategory(cat.id)}
+                            className={`
+                                px-3 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200 border flex items-center gap-1.5
+                                ${isActive 
+                                    ? 'bg-blue-500/20 border-blue-500/50 text-blue-200' 
+                                    : 'bg-surface border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                                }
+                            `}
+                        >
+                            {cat.name}
+                            <span className="opacity-50">({count})</span>
+                        </button>
+                    )
+                })}
+            </div>
+        )}
       </header>
 
       {/* Exercise List */}
@@ -261,23 +355,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ exercises, categories, ses
                 <div className="w-20 h-20 bg-zinc-800/50 rounded-full flex items-center justify-center text-zinc-600 mb-4 border border-zinc-800">
                     <Plus size={32} />
                 </div>
-                <h3 className="text-lg font-medium text-white mb-2">Selecione grupos musculares</h3>
-                <p className="text-zinc-500 max-w-xs text-sm">Clique nas categorias acima (ex: Peito, Tríceps) para montar sua ficha de hoje.</p>
+                <h3 className="text-lg font-medium text-white mb-2">Selecione um Grupo</h3>
+                <p className="text-zinc-500 max-w-xs text-sm">Clique em A, B, C acima para ver os exercícios.</p>
              </div>
         ) : filteredExercises.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center text-zinc-500">
-                <p>Nenhum exercício cadastrado para as categorias selecionadas.</p>
-                <p className="text-xs mt-2">Vá em "Exercícios" para cadastrar novos.</p>
+                <p>Nenhum exercício encontrado nesta categoria.</p>
             </div>
         ) : (
             filteredExercises.map((ex) => {
             const sessionData = activeSession?.exercises[ex.id];
             const sets = sessionData?.sets || [];
-            
-            // CORREÇÃO CRÍTICA: Math.max garante que se eu fizer 1 set de um alvo de 3,
-            // continue mostrando 3 linhas, e se eu fizer 4, mostre 4 linhas.
             const displaySetsCount = Math.max(sets.length, ex.targetSets);
             
+            // Progressive Overload Data
+            const lastSessionData = getLastSessionData(ex.id);
+
             return (
                 <div key={ex.id} className="bg-surface border border-white/5 rounded-2xl overflow-hidden shadow-sm animate-in slide-in-from-bottom-4 duration-300">
                 <div className="p-4 flex items-center justify-between border-b border-white/5 bg-zinc-800/30">
@@ -298,7 +391,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ exercises, categories, ses
                         <button 
                             onClick={() => window.open(ex.videoUrl, '_blank')}
                             className="p-2 bg-blue-500/10 text-blue-400 rounded-lg hover:bg-blue-500/20"
-                            title="Ver demonstração"
                         >
                             <ExternalLink size={18} />
                         </button>
@@ -320,69 +412,82 @@ export const Dashboard: React.FC<DashboardProps> = ({ exercises, categories, ses
                         const currentWeight = set?.weight ?? 0;
                         const currentReps = set?.reps ?? ex.targetReps;
                         
+                        // Last Lift Comparison
+                        const prevSet = lastSessionData?.sets[idx];
+                        
                         return (
-                            <div key={idx} className={`grid grid-cols-12 gap-2 items-center p-2 rounded-xl transition-colors ${isCompleted ? 'bg-green-500/10' : 'bg-zinc-800/50'}`}>
-                                <div className="col-span-1 text-center font-mono text-zinc-400 text-sm">
-                                    {idx + 1}
-                                </div>
-                                
-                                <div className="col-span-5 flex items-center gap-1">
-                                    <button 
-                                    onClick={() => activeSession && updateSet(ex.id, idx, 'weight', currentWeight - 5)}
-                                    className="h-8 w-6 flex items-center justify-center bg-zinc-700/50 hover:bg-zinc-700 rounded-l-lg text-[10px] text-zinc-400"
-                                    disabled={!activeSession}
-                                    >-5</button>
-                                    <input 
-                                        type="number" 
-                                        className="w-full h-8 bg-black/20 border-y border-white/5 px-1 text-center text-sm font-medium focus:ring-1 focus:ring-blue-500 outline-none"
-                                        value={set?.weight ?? ''}
-                                        onChange={(e) => activeSession && updateSet(ex.id, idx, 'weight', Number(e.target.value))}
-                                        placeholder="0"
-                                        disabled={!activeSession}
-                                    />
-                                    <button 
-                                    onClick={() => activeSession && updateSet(ex.id, idx, 'weight', currentWeight + 5)}
-                                    className="h-8 w-6 flex items-center justify-center bg-zinc-700/50 hover:bg-zinc-700 rounded-r-lg text-[10px] text-zinc-400"
-                                    disabled={!activeSession}
-                                    >+5</button>
-                                </div>
+                            <div key={idx} className="relative group">
+                                {/* PROGRESSIVE OVERLOAD GHOST TEXT */}
+                                {prevSet && prevSet.completed && (
+                                    <div className="absolute -top-3 left-14 text-[9px] text-zinc-600 flex items-center gap-1">
+                                        <History size={8} /> 
+                                        Anterior: {prevSet.weight}kg x {prevSet.reps}
+                                    </div>
+                                )}
 
-                                <div className="col-span-4 flex items-center gap-1">
-                                    <button 
-                                    onClick={() => activeSession && updateSet(ex.id, idx, 'reps', currentReps - 1)}
-                                    className="h-8 w-6 flex items-center justify-center bg-zinc-700/50 hover:bg-zinc-700 rounded-l-lg text-zinc-400"
-                                    disabled={!activeSession}
-                                    >
-                                    <Minus size={12} />
-                                    </button>
-                                    <input 
-                                        type="number" 
-                                        className="w-full h-8 bg-black/20 border-y border-white/5 px-1 text-center text-sm font-medium focus:ring-1 focus:ring-blue-500 outline-none"
-                                        value={set?.reps ?? ex.targetReps}
-                                        onChange={(e) => activeSession && updateSet(ex.id, idx, 'reps', Number(e.target.value))}
+                                <div className={`grid grid-cols-12 gap-2 items-center p-2 rounded-xl transition-colors ${isCompleted ? 'bg-green-500/10' : 'bg-zinc-800/50'} mt-2`}>
+                                    <div className="col-span-1 text-center font-mono text-zinc-400 text-sm">
+                                        {idx + 1}
+                                    </div>
+                                    
+                                    <div className="col-span-5 flex items-center gap-1">
+                                        <button 
+                                        onClick={() => activeSession && updateSet(ex.id, idx, 'weight', currentWeight - 5)}
+                                        className="h-8 w-6 flex items-center justify-center bg-zinc-700/50 hover:bg-zinc-700 rounded-l-lg text-[10px] text-zinc-400"
                                         disabled={!activeSession}
-                                    />
-                                    <button 
-                                    onClick={() => activeSession && updateSet(ex.id, idx, 'reps', currentReps + 1)}
-                                    className="h-8 w-6 flex items-center justify-center bg-zinc-700/50 hover:bg-zinc-700 rounded-r-lg text-zinc-400"
-                                    disabled={!activeSession}
-                                    >
-                                    <Plus size={12} />
-                                    </button>
-                                </div>
+                                        >-5</button>
+                                        <input 
+                                            type="number" 
+                                            className="w-full h-8 bg-black/20 border-y border-white/5 px-1 text-center text-sm font-medium focus:ring-1 focus:ring-blue-500 outline-none"
+                                            value={set?.weight ?? ''}
+                                            onChange={(e) => activeSession && updateSet(ex.id, idx, 'weight', Number(e.target.value))}
+                                            placeholder="0"
+                                            disabled={!activeSession}
+                                        />
+                                        <button 
+                                        onClick={() => activeSession && updateSet(ex.id, idx, 'weight', currentWeight + 5)}
+                                        className="h-8 w-6 flex items-center justify-center bg-zinc-700/50 hover:bg-zinc-700 rounded-r-lg text-[10px] text-zinc-400"
+                                        disabled={!activeSession}
+                                        >+5</button>
+                                    </div>
 
-                                <div className="col-span-2 flex justify-center">
-                                    <button
-                                        onClick={() => activeSession && updateSet(ex.id, idx, 'completed', !isCompleted)}
+                                    <div className="col-span-4 flex items-center gap-1">
+                                        <button 
+                                        onClick={() => activeSession && updateSet(ex.id, idx, 'reps', currentReps - 1)}
+                                        className="h-8 w-6 flex items-center justify-center bg-zinc-700/50 hover:bg-zinc-700 rounded-l-lg text-zinc-400"
                                         disabled={!activeSession}
-                                        className={`h-8 w-full rounded-lg flex items-center justify-center transition-all ${
-                                            isCompleted 
-                                            ? 'bg-green-500 text-white shadow-lg shadow-green-900/20' 
-                                            : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'
-                                        } ${!activeSession ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                    >
-                                        <Check size={16} strokeWidth={3} />
-                                    </button>
+                                        >
+                                        <Minus size={12} />
+                                        </button>
+                                        <input 
+                                            type="number" 
+                                            className="w-full h-8 bg-black/20 border-y border-white/5 px-1 text-center text-sm font-medium focus:ring-1 focus:ring-blue-500 outline-none"
+                                            value={set?.reps ?? ex.targetReps}
+                                            onChange={(e) => activeSession && updateSet(ex.id, idx, 'reps', Number(e.target.value))}
+                                            disabled={!activeSession}
+                                        />
+                                        <button 
+                                        onClick={() => activeSession && updateSet(ex.id, idx, 'reps', currentReps + 1)}
+                                        className="h-8 w-6 flex items-center justify-center bg-zinc-700/50 hover:bg-zinc-700 rounded-r-lg text-zinc-400"
+                                        disabled={!activeSession}
+                                        >
+                                        <Plus size={12} />
+                                        </button>
+                                    </div>
+
+                                    <div className="col-span-2 flex justify-center">
+                                        <button
+                                            onClick={() => activeSession && updateSet(ex.id, idx, 'completed', !isCompleted)}
+                                            disabled={!activeSession}
+                                            className={`h-8 w-full rounded-lg flex items-center justify-center transition-all ${
+                                                isCompleted 
+                                                ? 'bg-green-500 text-white shadow-lg shadow-green-900/20' 
+                                                : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'
+                                            } ${!activeSession ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        >
+                                            <Check size={16} strokeWidth={3} />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         );

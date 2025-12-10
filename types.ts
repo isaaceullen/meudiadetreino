@@ -1,7 +1,11 @@
+
+export type GroupId = 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
+
 export interface Category {
   id: string;
   name: string;
   isDefault?: boolean;
+  group?: GroupId; // A, B, C...
 }
 
 export interface Exercise {
@@ -40,11 +44,12 @@ export interface WorkoutSession {
 export interface AppState {
   exercises: Exercise[];
   sessions: WorkoutSession[];
-  categories: Category[]; // Nova lista de categorias
+  categories: Category[];
   settings: {
     soundEnabled: boolean;
     restTimerDefault: number;
-    autoTimer: boolean; // Novo ajuste
+    autoTimer: boolean;
+    groupSchedule: Record<GroupId, string>; // Mapeia 'A' -> 'Monday', etc.
   };
 }
 

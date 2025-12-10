@@ -1,9 +1,15 @@
+
 export const generateId = (): string => {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
 };
 
 export const getTodayDateISO = (): string => {
   return new Date().toISOString().split('T')[0];
+};
+
+export const getTodayWeekdayName = (): string => {
+  // Retorna 'Monday', 'Tuesday', etc. em inglês para padronização interna
+  return new Date().toLocaleDateString('en-US', { weekday: 'long' });
 };
 
 export const formatDuration = (ms: number): string => {
@@ -15,5 +21,18 @@ export const formatDuration = (ms: number): string => {
   return `${minutes}m ${seconds}s`;
 };
 
-// Removed playBeep in favor of Audio file in component
-// Removed WEEKDAYS_LABELS
+export const GROUP_IDS = ['A', 'B', 'C', 'D', 'E', 'F'] as const;
+
+export const WEEKDAYS_EN = [
+  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+];
+
+export const WEEKDAYS_PT: Record<string, string> = {
+  'Monday': 'Segunda',
+  'Tuesday': 'Terça',
+  'Wednesday': 'Quarta',
+  'Thursday': 'Quinta',
+  'Friday': 'Sexta',
+  'Saturday': 'Sábado',
+  'Sunday': 'Domingo'
+};

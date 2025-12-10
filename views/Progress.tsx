@@ -1,7 +1,9 @@
+
 import React, { useState, useMemo } from 'react';
 import { ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
 import { WorkoutSession, Exercise, SessionExercise, Category } from '../types';
-import { ChevronLeft, ChevronRight, Activity, CheckCircle, FileText, Dumbbell } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Activity, CheckCircle, FileText, Clock } from 'lucide-react';
+import { formatDuration } from '../utils/helpers';
 
 interface ProgressProps {
   sessions: WorkoutSession[];
@@ -17,7 +19,6 @@ const MONTHS_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', '
 
 export const Progress: React.FC<ProgressProps> = ({ sessions, exercises, categories }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
-  // Guarda a data selecionada como string YYYY-MM-DD
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(new Date().toISOString().split('T')[0]);
   const [chartMode, setChartMode] = useState<ChartMode>('general');
   const [calendarMode, setCalendarMode] = useState<CalendarMode>('monthly');
@@ -38,7 +39,6 @@ export const Progress: React.FC<ProgressProps> = ({ sessions, exercises, categor
 
   const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay(); // 0 (Sun) to 6 (Sat)
   
-  // Create a map of sessions for quick lookup by YYYY-MM-DD
   const sessionMap = useMemo(() => {
     const map = new Map<string, WorkoutSession>();
     sessions.forEach(s => map.set(s.date, s));
@@ -50,7 +50,6 @@ export const Progress: React.FC<ProgressProps> = ({ sessions, exercises, categor
       const year = currentDate.getFullYear();
       const stats = Array(12).fill(0);
       let totalAnnual = 0;
-
       sessions.forEach(s => {
           const d = new Date(s.date);
           if (d.getFullYear() === year) {
@@ -58,10 +57,24 @@ export const Progress: React.FC<ProgressProps> = ({ sessions, exercises, categor
               totalAnnual++;
           }
       });
-      
       return { monthlyCounts: stats, total: totalAnnual };
   }, [sessions, currentDate]);
 
+  // Monthly Duration Stat
+  const monthlyTotalDuration = useMemo(() => {
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      let totalMs = 0;
+      sessions.forEach(s => {
+          const d = new Date(s.date);
+          if (d.getFullYear() === year && d.getMonth() === month) {
+              if (s.endTime && s.startTime) {
+                  totalMs += (s.endTime - s.startTime);
+              }
+          }
+      });
+      return totalMs;
+  }, [sessions, currentDate]);
 
   const prevDate = () => {
       if (calendarMode === 'monthly') {
@@ -83,7 +96,6 @@ export const Progress: React.FC<ProgressProps> = ({ sessions, exercises, categor
       setSelectedDateKey(dateStr);
   };
 
-  // Stats Counters for current month view
   let daysWentMonth = 0;
   if (calendarMode === 'monthly') {
       daysInMonth.forEach(date => {
@@ -93,8 +105,6 @@ export const Progress: React.FC<ProgressProps> = ({ sessions, exercises, categor
   }
 
   // --- CHART DATA GENERATION ---
-
-  // 1. General (Volume per day last 30 sessions or current month)
   const generalData = useMemo(() => {
     return sessions
         .sort((a,b) => a.date.localeCompare(b.date))
@@ -112,10 +122,8 @@ export const Progress: React.FC<ProgressProps> = ({ sessions, exercises, categor
         });
   }, [sessions]);
 
-  // 2. Exercise Specific (Max Weight over time)
   const exerciseData = useMemo(() => {
     if (!selectedExerciseId) return [];
-    
     return sessions
         .filter(s => s.exercises[selectedExerciseId])
         .sort((a,b) => a.date.localeCompare(b.date))
@@ -129,10 +137,8 @@ export const Progress: React.FC<ProgressProps> = ({ sessions, exercises, categor
         });
   }, [sessions, selectedExerciseId]);
 
-  // 3. Category Distribution (Pie Chart)
   const categoryData = useMemo(() => {
     const counts: Record<string, number> = {};
-    
     sessions.forEach(s => {
         Object.keys(s.exercises).forEach(exId => {
             const exerciseDef = exercises.find(e => e.id === exId);
@@ -145,7 +151,6 @@ export const Progress: React.FC<ProgressProps> = ({ sessions, exercises, categor
             }
         });
     });
-
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [sessions, exercises, categories]);
 
@@ -172,15 +177,20 @@ export const Progress: React.FC<ProgressProps> = ({ sessions, exercises, categor
               }
           });
       });
+      
+      const duration = (session.endTime && session.startTime) ? (session.endTime - session.startTime) : 0;
 
       return (
           <div className="bg-zinc-800/50 rounded-xl border border-white/5 p-4 space-y-3 animate-in fade-in duration-300">
               <div className="flex justify-between items-start">
                   <div>
                       <h3 className="font-semibold text-white">Treino de {new Date(selectedDateKey).toLocaleDateString('pt-BR')}</h3>
-                      <div className="text-xs text-zinc-400 mt-1 flex gap-3">
+                      <div className="text-xs text-zinc-400 mt-1 flex gap-3 items-center">
                           <span>{totalSets} Séries</span>
-                          <span>{(totalVolume/1000).toFixed(1)}k Vol (kg)</span>
+                          <span>{(totalVolume/1000).toFixed(1)}k Vol</span>
+                          {duration > 0 && (
+                            <span className="flex items-center gap-1"><Clock size={10} /> {formatDuration(duration)}</span>
+                          )}
                       </div>
                   </div>
                   <div className="bg-green-500/10 text-green-400 p-2 rounded-lg">
@@ -240,7 +250,6 @@ export const Progress: React.FC<ProgressProps> = ({ sessions, exercises, categor
                         ))}
                     </div>
                     <div className="grid grid-cols-7 gap-1">
-                        {/* Empty slots for previous month */}
                         {Array.from({ length: firstDayOfMonth }).map((_, i) => (
                             <div key={`empty-${i}`} className="aspect-square" />
                         ))}
@@ -252,11 +261,9 @@ export const Progress: React.FC<ProgressProps> = ({ sessions, exercises, categor
                             const isToday = new Date().toISOString().split('T')[0] === dateStr;
 
                             let statusClass = 'bg-zinc-800/30 text-zinc-600 border-transparent';
-                            
                             if (hasWorkout) {
                                 statusClass = 'bg-green-500/20 text-green-400 border-green-500/30';
                             }
-                            
                             if (isSelected) {
                                 statusClass += ' ring-2 ring-white ring-offset-2 ring-offset-surface z-10';
                             } else if (isToday) {
@@ -283,9 +290,17 @@ export const Progress: React.FC<ProgressProps> = ({ sessions, exercises, categor
                         {renderSessionDetails()}
                     </div>
 
-                    <div className="mt-4 flex items-center justify-center gap-2">
-                        <CheckCircle size={16} className="text-green-500" />
-                        <span className="text-sm text-zinc-300">Total no mês: <strong className="text-white">{daysWentMonth}</strong> treinos</span>
+                    <div className="mt-4 flex items-center justify-between gap-2 px-2">
+                        <div className="flex items-center gap-1.5">
+                            <CheckCircle size={16} className="text-green-500" />
+                            <span className="text-xs text-zinc-300"><strong>{daysWentMonth}</strong> treinos</span>
+                        </div>
+                        {monthlyTotalDuration > 0 && (
+                            <div className="flex items-center gap-1.5">
+                                <Clock size={16} className="text-blue-500" />
+                                <span className="text-xs text-zinc-300">Tempo Total: <strong>{formatDuration(monthlyTotalDuration)}</strong></span>
+                            </div>
+                        )}
                     </div>
                 </>
             ) : (
@@ -356,7 +371,8 @@ export const Progress: React.FC<ProgressProps> = ({ sessions, exercises, categor
                     ) : <div className="h-full flex items-center justify-center text-zinc-500 text-sm">Realize mais treinos para ver dados.</div>}
                 </div>
             )}
-
+            
+            {/* Same charts as before for exercise/category... */}
             {chartMode === 'exercise' && (
                 <div className="h-full flex flex-col">
                     <div className="mb-4">

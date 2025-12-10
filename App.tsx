@@ -1,23 +1,25 @@
+
 import React, { useEffect, useState } from 'react';
 import { Dumbbell, LayoutDashboard, Settings as SettingsIcon, TrendingUp } from 'lucide-react';
 import { Dashboard } from './views/Dashboard';
 import { Exercises } from './views/Exercises';
 import { Settings } from './views/Settings';
 import { Progress } from './views/Progress';
-import { AppState, Tab, WorkoutSession, Exercise, Category } from './types';
+import { AppState, Tab, WorkoutSession, Exercise, Category, GroupId } from './types';
 import { generateId } from './utils/helpers';
 
-const STORAGE_KEY = 'meudiadetreino_v2'; // Chave nova para forçar separação
+const STORAGE_KEY = 'meudiadetreino_v2';
 
+// Categorias padrão com Grupos já atribuídos para demonstração
 const DEFAULT_CATEGORIES: Category[] = [
-  { id: 'cat_chest', name: 'Peito', isDefault: true },
-  { id: 'cat_back', name: 'Costas', isDefault: true },
-  { id: 'cat_legs', name: 'Pernas', isDefault: true },
-  { id: 'cat_shoulders', name: 'Ombros', isDefault: true },
-  { id: 'cat_biceps', name: 'Bíceps', isDefault: true },
-  { id: 'cat_triceps', name: 'Tríceps', isDefault: true },
-  { id: 'cat_abs', name: 'Abdômen', isDefault: true },
-  { id: 'cat_cardio', name: 'Cardio', isDefault: true },
+  { id: 'cat_chest', name: 'Peito', isDefault: true, group: 'A' },
+  { id: 'cat_triceps', name: 'Tríceps', isDefault: true, group: 'A' },
+  { id: 'cat_back', name: 'Costas', isDefault: true, group: 'B' },
+  { id: 'cat_biceps', name: 'Bíceps', isDefault: true, group: 'B' },
+  { id: 'cat_legs', name: 'Pernas', isDefault: true, group: 'C' },
+  { id: 'cat_shoulders', name: 'Ombros', isDefault: true, group: 'C' },
+  { id: 'cat_abs', name: 'Abdômen', isDefault: true, group: 'D' },
+  { id: 'cat_cardio', name: 'Cardio', isDefault: true, group: 'D' },
 ];
 
 const INITIAL_STATE: AppState = {
@@ -27,7 +29,15 @@ const INITIAL_STATE: AppState = {
   settings: {
     soundEnabled: true,
     restTimerDefault: 60,
-    autoTimer: true
+    autoTimer: true,
+    groupSchedule: {
+      'A': 'Monday',
+      'B': 'Tuesday',
+      'C': 'Wednesday',
+      'D': 'Thursday',
+      'E': '',
+      'F': ''
+    }
   }
 };
 
@@ -38,10 +48,8 @@ const App: React.FC = () => {
 
   // Load from local storage and Migrate logic
   useEffect(() => {
-    // Check for old data key to clear if needed, or simple migration
     const oldStorage = localStorage.getItem('irontrack_v1');
     if (oldStorage) {
-      console.log("Detectados dados antigos. Limpando para migração limpa do novo app.");
       localStorage.removeItem('irontrack_v1');
     }
 
@@ -49,12 +57,25 @@ const App: React.FC = () => {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // Garante que novas propriedades existam se vier de um save anterior incompleto
+        
+        // MIGRATION LOGIC: Ensure new fields exist
+        const mergedCategories = (parsed.categories || DEFAULT_CATEGORIES).map((c: Category) => ({
+             ...c,
+             // Se não tiver grupo (migração de v1), atribui um aleatório ou default
+             group: c.group || 'A' 
+        }));
+
+        const mergedSettings = {
+            ...INITIAL_STATE.settings,
+            ...parsed.settings,
+            groupSchedule: parsed.settings?.groupSchedule || INITIAL_STATE.settings.groupSchedule
+        };
+
         const mergedState = {
             ...INITIAL_STATE,
             ...parsed,
-            settings: { ...INITIAL_STATE.settings, ...parsed.settings },
-            categories: (parsed.categories && parsed.categories.length > 0) ? parsed.categories : DEFAULT_CATEGORIES
+            categories: mergedCategories,
+            settings: mergedSettings,
         };
         setState(mergedState);
       } catch (e) {
@@ -100,7 +121,6 @@ const App: React.FC = () => {
   };
 
   const handleImport = (newState: AppState) => {
-    // Validação básica para garantir compatibilidade
     if (!newState.categories) {
         newState.categories = DEFAULT_CATEGORIES;
     }
@@ -108,11 +128,13 @@ const App: React.FC = () => {
   };
 
   const handleReset = () => {
-    setState(INITIAL_STATE);
-    localStorage.removeItem(STORAGE_KEY);
-    setTimeout(() => {
-      window.location.reload();
-    }, 100);
+    if(confirm('Deletar permanentemente todos os dados?')) {
+        setState(INITIAL_STATE);
+        localStorage.removeItem(STORAGE_KEY);
+        setTimeout(() => {
+          window.location.reload();
+        }, 100);
+    }
   };
 
   if (!isLoaded) return <div className="min-h-screen bg-background flex items-center justify-center text-white">Carregando...</div>;
@@ -135,8 +157,10 @@ const App: React.FC = () => {
           <Exercises 
             exercises={state.exercises} 
             categories={state.categories}
+            settings={state.settings}
             onUpdateExercises={handleUpdateExercises} 
             onUpdateCategories={handleUpdateCategories}
+            onUpdateSettings={handleUpdateSettings}
           />
         )}
         {activeTab === 'progress' && (

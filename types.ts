@@ -1,56 +1,110 @@
 
-export type GroupId = 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
+export type GroupLetter = 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
+export const GROUPS: GroupLetter[] = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+// DayId and DAY_NAMES for scheduling and display
+export type DayId = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+export const DAY_NAMES: Record<number, string> = {
+  0: 'Domingo',
+  1: 'Segunda-feira',
+  2: 'Terça-feira',
+  3: 'Quarta-feira',
+  4: 'Quinta-feira',
+  5: 'Sexta-feira',
+  6: 'Sábado'
+};
 
 export interface Category {
   id: string;
   name: string;
-  isDefault?: boolean;
-  group?: GroupId; // A, B, C...
+  groupLetter: GroupLetter;
 }
 
 export interface Exercise {
   id: string;
   name: string;
-  equipment: string;
-  targetSets: number;
-  targetReps: number;
-  videoUrl?: string;
-  note?: string;
-  categoryId: string; // Link para a entidade Category
+  categoryId: string;
+  defaultSets: number;
+  defaultReps: number;
+  initialLoad: number;
+  viewUrl?: string;
+  url?: string; // Compatibility with screens/Dashboard.tsx
+  notes?: string;
+  // Compatibility fields for constants.tsx and various managers
+  equipment?: string;
+  weekdays?: number[];
+  restTime?: number;
+  load?: number;
+  sets?: number;
+  reps?: number;
+  category?: string;
 }
 
-export interface SetLog {
+export interface SeriesEntry {
   id: string;
-  weight: number;
+  load: number;
   reps: number;
   completed: boolean;
-  timestamp: number;
 }
 
-export interface SessionExercise {
-  exerciseId: string;
-  sets: SetLog[];
-}
-
-export interface WorkoutSession {
-  id: string;
-  date: string; // ISO Date string YYYY-MM-DD
+export interface WorkoutDraft {
   startTime: number;
-  endTime?: number;
-  exercises: Record<string, SessionExercise>; // Keyed by exerciseId
-  note?: string;
-}
-
-export interface AppState {
-  exercises: Exercise[];
-  sessions: WorkoutSession[];
-  categories: Category[];
-  settings: {
-    soundEnabled: boolean;
-    restTimerDefault: number;
-    autoTimer: boolean;
-    groupSchedule: Record<GroupId, string>; // Mapeia 'A' -> 'Monday', etc.
+  selectedGroups: GroupLetter[];
+  exercises: {
+    [exerciseId: string]: SeriesEntry[];
   };
 }
 
-export type Tab = 'dashboard' | 'exercises' | 'history' | 'progress' | 'settings';
+export interface Session {
+  id: string;
+  date: string; // YYYY-MM-DD
+  startTime: number;
+  endTime: number;
+  durationMinutes: number;
+  volume: number;
+  totalSeries: number;
+  notes: string;
+  groups: GroupLetter[];
+  details: {
+    exerciseId: string;
+    exerciseName: string;
+    series: { load: number; reps: number }[];
+  }[];
+}
+
+// WorkoutLog for simple session tracking
+export interface WorkoutLog {
+  id: string;
+  date: string;
+  groupLetter: GroupLetter;
+  completedExercises: string[];
+}
+
+// Schedule maps day index to a group
+export type Schedule = Record<number, GroupLetter | null>;
+
+// WorkoutHistory used in Progress and constants
+export interface WorkoutHistory {
+  id: string;
+  exerciseId: string;
+  exerciseName: string;
+  load: number;
+  reps: number;
+  sets: number;
+  date: string;
+}
+
+export interface AppSettings {
+  autoTimer: boolean;
+  restTimeSeconds: number;
+}
+
+export interface AppState {
+  categories: Category[];
+  exercises: Exercise[];
+  sessions: Session[];
+  settings: AppSettings;
+  schedule: Schedule;
+  logs: WorkoutLog[];
+  history: WorkoutHistory[];
+}

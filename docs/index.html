@@ -1,67 +1,60 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR" class="dark">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Meu Dia de Treino</title>
-    <link rel="icon" type="image/png" href="/IconApp.png" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-            },
-            colors: {
-              background: '#09090b', // zinc-950
-              surface: '#18181b', // zinc-900
-              primary: '#3b82f6', // blue-500
-              secondary: '#27272a', // zinc-800
-              accent: '#f43f5e', // rose-500
-            },
-            animation: {
-              'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-            }
-          }
-        }
-      }
-    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="manifest" href="/meudiadetreino/assets/manifest-mBmm08w-.json">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#000000">
+
     <style>
-      /* Custom scrollbar for webkit */
-      ::-webkit-scrollbar { width: 6px; height: 6px; }
-      ::-webkit-scrollbar-track { background: transparent; }
-      ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
-      ::-webkit-scrollbar-thumb:hover { background: #52525b; }
-      body { background-color: #09090b; color: #e4e4e7; }
-      
-      /* Hide scrollbar for clean chip lists */
-      .no-scrollbar::-webkit-scrollbar {
-          display: none;
-      }
-      .no-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-      }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #000;
+            color: #fff;
+            overscroll-behavior-y: contain;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .safe-area-bottom {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .no-spinner {
+            -moz-appearance: textfield;
+        }
     </style>
 
 <link rel="stylesheet" href="/index.css">
-  <script type="importmap">
-{
-  "imports": {
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
-    "recharts": "https://aistudiocdn.com/recharts@^3.5.1"
-  }
-}
-</script>
-  <script type="module" crossorigin src="/meudiadetreino/assets/index-Bpb1ZIGO.js"></script>
+    <script type="importmap">
+    {
+      "imports": {
+        "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+        "react/": "https://esm.sh/react@^19.2.3/",
+        "react": "https://esm.sh/react@^19.2.3",
+        "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+        "recharts": "https://esm.sh/recharts@^3.6.0",
+        "date-fns": "https://esm.sh/date-fns@^4.1.0",
+        "date-fns/": "https://esm.sh/date-fns@^4.1.0/"
+      }
+    }
+    </script>
+  <script type="module" crossorigin src="/meudiadetreino/assets/index-Asg41hdJ.js"></script>
 </head>
-  <body>
+<body class="bg-black">
     <div id="root"></div>
 </body>
 </html>

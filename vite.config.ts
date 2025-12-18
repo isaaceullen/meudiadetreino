@@ -5,12 +5,8 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
-      // Configuração essencial para o GitHub Pages
+      // Define o caminho base como o nome do repositório
       base: '/meudiadetreino/',
-      build: {
-        // Define a pasta de saída como 'docs'
-        outDir: 'docs',
-      },
       server: {
         port: 3000,
         host: '0.0.0.0',
@@ -24,6 +20,12 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
+      },
+      build: {
+        // Altera a pasta de saída para 'docs' para facilitar o deploy no GH Pages
+        outDir: 'docs',
+        // Garante que a pasta seja limpa antes de cada build
+        emptyOutDir: true,
       }
     };
 });

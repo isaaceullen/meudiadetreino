@@ -9,10 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
-    <link rel="manifest" href="manifest.json">
     
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
 
     <style>
@@ -36,6 +33,14 @@
         .no-spinner {
             -moz-appearance: textfield;
         }
+        /* Esconder scrollbars para uma UI mais limpa */
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
     </style>
     <script type="importmap">
     {
@@ -46,7 +51,8 @@
         "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
         "recharts": "https://esm.sh/recharts@^3.6.0",
         "date-fns": "https://esm.sh/date-fns@^4.1.0",
-        "date-fns/": "https://esm.sh/date-fns@^4.1.0/"
+        "date-fns/": "https://esm.sh/date-fns@^4.1.0/",
+        "date-fns/locale": "https://esm.sh/date-fns@^4.1.0/locale"
       }
     }
     </script>

@@ -1,14 +1,16 @@
 
 import React, { useState, useMemo } from 'react';
-import { format, endOfMonth, eachDayOfInterval, isSameDay, endOfWeek } from 'date-fns';
-// @ts-ignore
-import startOfMonth from 'date-fns/startOfMonth';
-// @ts-ignore
-import parseISO from 'date-fns/parseISO';
-// @ts-ignore
-import startOfWeek from 'date-fns/startOfWeek';
-// @ts-ignore
-import { ptBR } from 'date-fns/locale/pt-BR';
+import { 
+  format, 
+  endOfMonth, 
+  eachDayOfInterval, 
+  isSameDay, 
+  endOfWeek, 
+  startOfMonth, 
+  parseISO, 
+  startOfWeek 
+} from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
 import { ChevronLeft, ChevronRight, X, Clock, Dumbbell, Activity, TrendingUp, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -48,7 +50,7 @@ const SessionAccordion: React.FC<{ session: any; index: number; onDelete: (id: s
           <div className="grid grid-cols-2 gap-3 mb-6">
             <div className="bg-black/40 p-4 rounded-2xl border border-zinc-800/50">
               <p className="text-[9px] font-black text-zinc-600 uppercase mb-1">Início</p>
-              <p className="font-black italic text-sm text-white">{format(session.startTime, 'HH:mm')}</p>
+              <p className="font-black italic text-sm text-white">{format(new Date(session.startTime), 'HH:mm')}</p>
             </div>
             <div className="bg-black/40 p-4 rounded-2xl border border-zinc-800/50">
               <p className="text-[9px] font-black text-zinc-600 uppercase mb-1">Volume</p>
@@ -91,10 +93,12 @@ export const HistoryScreen: React.FC<{ manager: any }> = ({ manager }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
 
-  const monthDays = eachDayOfInterval({
-    start: startOfWeek(startOfMonth(currentMonth)),
-    end: endOfWeek(endOfMonth(currentMonth))
-  });
+  const monthDays = useMemo(() => {
+    return eachDayOfInterval({
+      start: startOfWeek(startOfMonth(currentMonth)),
+      end: endOfWeek(endOfMonth(currentMonth))
+    });
+  }, [currentMonth]);
 
   const getSessionsForDay = (date: Date) => {
     return (state.sessions || []).filter((s: any) => isSameDay(parseISO(s.date), date));

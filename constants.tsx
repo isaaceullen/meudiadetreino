@@ -1,8 +1,10 @@
+// constants.tsx
 import { AppState } from './types';
 
-// A chave de API é injetada pelo Vite durante o build (definida no vite.config.ts)
-// Se o TypeScript reclamar do 'process', o @types/node já deve resolver.
-export const GEMINI_API_KEY = process.env.GEMINI_API_KEY as string;
+// Exporta a chave de API injetada pelo Vite durante o build
+// ATENÇÃO: Como estamos usando 'define' no vite.config.ts, esta variável será
+// substituída pelo valor real da chave no momento da compilação.
+export const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
 export const INITIAL_DATA: AppState = {
   categories: [],

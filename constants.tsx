@@ -1,6 +1,8 @@
-
-// constants.tsx
 import { AppState } from './types';
+
+// A chave de API é injetada pelo Vite durante o build (definida no vite.config.ts)
+// Se o TypeScript reclamar do 'process', o @types/node já deve resolver.
+export const GEMINI_API_KEY = process.env.GEMINI_API_KEY as string;
 
 export const INITIAL_DATA: AppState = {
   categories: [],
@@ -24,7 +26,6 @@ export const INITIAL_DATA: AppState = {
       restTime: 60,
       defaultSets: 3,
       defaultReps: 10,
-      // Added missing initialLoad property
       initialLoad: 60
     },
     {
@@ -39,7 +40,6 @@ export const INITIAL_DATA: AppState = {
       restTime: 90,
       defaultSets: 4,
       defaultReps: 12,
-      // Added missing initialLoad property
       initialLoad: 80
     },
     {
@@ -54,7 +54,6 @@ export const INITIAL_DATA: AppState = {
       restTime: 60,
       defaultSets: 3,
       defaultReps: 10,
-      // Added missing initialLoad property
       initialLoad: 50
     }
   ],

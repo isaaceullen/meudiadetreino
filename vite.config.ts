@@ -5,14 +5,17 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
-      // Define o caminho base como o nome do repositório
-      base: '/meudiadetreino/',
+      base: '/meudiadetreino/', // Define o caminho base do repositório
+      build: {
+        outDir: 'docs', // Define a pasta de saída para o GitHub Pages
+      },
       server: {
         port: 3000,
         host: '0.0.0.0',
       },
       plugins: [react()],
       define: {
+        // Garante que as chaves sejam injetadas durante o build
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
       },
@@ -20,12 +23,6 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
-      },
-      build: {
-        // Altera a pasta de saída para 'docs' para facilitar o deploy no GH Pages
-        outDir: 'docs',
-        // Garante que a pasta seja limpa antes de cada build
-        emptyOutDir: true,
       }
     };
 });

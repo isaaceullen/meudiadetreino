@@ -79,7 +79,6 @@ export const useWorkoutManager = () => {
     const dataStr = JSON.stringify(state, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
     const exportFileDefaultName = `meu-dia-de-treino-backup-${new Date().toISOString().split('T')[0]}.json`;
-
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
@@ -99,18 +98,24 @@ export const useWorkoutManager = () => {
     }
   };
 
-  const getLastLoadForExercise = (exerciseId: string): number => {
-    const lastSessionWithExercise = [...state.sessions]
+  const getLastSessionData = (exerciseId: string) => {
+    const lastSession = [...state.sessions]
       .reverse()
       .find(s => s.details.some(d => d.exerciseId === exerciseId));
     
-    if (lastSessionWithExercise) {
-      const detail = lastSessionWithExercise.details.find(d => d.exerciseId === exerciseId);
-      return detail?.series[0]?.load || 0;
+    if (lastSession) {
+      const detail = lastSession.details.find(d => d.exerciseId === exerciseId);
+      return {
+        load: detail?.series[0]?.load || 0,
+        reps: detail?.series[0]?.reps || 0
+      };
     }
     
     const ex = state.exercises.find(e => e.id === exerciseId);
-    return ex?.initialLoad || 0;
+    return {
+      load: ex?.initialLoad || 0,
+      reps: ex?.defaultReps || 0
+    };
   };
 
   const startWorkout = (groups: GroupLetter[]) => {
@@ -121,11 +126,11 @@ export const useWorkoutManager = () => {
 
     const draftExercises: WorkoutDraft['exercises'] = {};
     exercisesInGroups.forEach(ex => {
-      const lastLoad = getLastLoadForExercise(ex.id);
+      const last = getLastSessionData(ex.id);
       draftExercises[ex.id] = Array.from({ length: ex.defaultSets }).map(() => ({
         id: crypto.randomUUID(),
-        load: lastLoad,
-        reps: ex.defaultReps,
+        load: last.load,
+        reps: last.reps,
         completed: false
       }));
     });
@@ -146,6 +151,20 @@ export const useWorkoutManager = () => {
         exercises: {
           ...prev.exercises,
           [exerciseId]: exSeries.map(s => s.id === seriesId ? { ...s, ...updates } : s)
+        }
+      };
+    });
+  };
+
+  const updateAllSeries = (exerciseId: string, updates: Partial<SeriesEntry>) => {
+    setActiveDraft(prev => {
+      if (!prev) return null;
+      const exSeries = prev.exercises[exerciseId] || [];
+      return {
+        ...prev,
+        exercises: {
+          ...prev.exercises,
+          [exerciseId]: exSeries.map(s => ({ ...s, ...updates }))
         }
       };
     });
@@ -193,6 +212,13 @@ export const useWorkoutManager = () => {
     setActiveDraft(null);
   };
 
+  const removeSession = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      sessions: prev.sessions.filter(s => s.id !== id)
+    }));
+  };
+
   const addCategory = (cat: Omit<Category, 'id'>) => {
     setState(prev => ({ ...prev, categories: [...prev.categories, { ...cat, id: crypto.randomUUID() }] }));
   };
@@ -233,7 +259,9 @@ export const useWorkoutManager = () => {
     activeDraft,
     startWorkout,
     updateSeries,
+    updateAllSeries,
     finishWorkout,
+    removeSession,
     cancelWorkout: () => setActiveDraft(null),
     addCategory,
     updateCategory,
@@ -244,6 +272,7 @@ export const useWorkoutManager = () => {
     exportData,
     importData,
     showDialog,
-    dialog
+    dialog,
+    getLastSessionData
   };
 };

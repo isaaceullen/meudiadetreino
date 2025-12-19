@@ -1,9 +1,9 @@
 {
-  "homepage": "https://isaaceullen.github.io/meudiadetreino",
   "name": "meu-dia-de-treino",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "homepage": "https://isaaceullen.github.io/meudiadetreino",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

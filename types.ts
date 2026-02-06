@@ -20,17 +20,28 @@ export interface Category {
   groupLetter: GroupLetter;
 }
 
+export type ExerciseType = 'strength' | 'cardio';
+
 export interface Exercise {
   id: string;
   name: string;
-  categoryId: string;
+  /** @deprecated use categoryIds instead */
+  categoryId?: string; 
+  categoryIds: string[]; // Suporte a múltiplas categorias (ex: Cardio em dia de Perna e Peito)
+  type: ExerciseType;
+  sortOrder: number; // Para ordenação personalizada
+  
+  // Strength fields
   defaultSets: number;
   defaultReps: number;
   initialLoad: number;
+  
+  // Common fields
   viewUrl?: string;
-  url?: string; // Compatibility with screens/Dashboard.tsx
+  url?: string; 
   notes?: string;
-  // Compatibility fields for constants.tsx and various managers
+  
+  // Compatibility fields
   equipment?: string;
   weekdays?: number[];
   restTime?: number;
@@ -50,8 +61,13 @@ export interface SeriesEntry {
 export interface WorkoutDraft {
   startTime: number;
   selectedGroups: GroupLetter[];
+  // Se for cardio, load/reps podem ser ignorados ou usados para tempo/distância
   exercises: {
     [exerciseId: string]: SeriesEntry[];
+  };
+  // Estado para cardio completed
+  cardioCompleted?: {
+    [exerciseId: string]: boolean;
   };
 }
 
@@ -69,10 +85,10 @@ export interface Session {
     exerciseId: string;
     exerciseName: string;
     series: { load: number; reps: number }[];
+    type?: ExerciseType;
   }[];
 }
 
-// WorkoutLog for simple session tracking
 export interface WorkoutLog {
   id: string;
   date: string;
@@ -80,10 +96,9 @@ export interface WorkoutLog {
   completedExercises: string[];
 }
 
-// Schedule maps day index to a group
-export type Schedule = Record<number, GroupLetter | null>;
+// Schedule agora mapeia dia para ARRAY de grupos (Multi-select)
+export type Schedule = Record<number, GroupLetter[]>;
 
-// WorkoutHistory used in Progress and constants
 export interface WorkoutHistory {
   id: string;
   exerciseId: string;

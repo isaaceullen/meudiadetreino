@@ -7,12 +7,11 @@ export const HomeScreen: React.FC<{ manager: any }> = ({ manager }) => {
   const { state, startWorkout } = manager;
   const [selected, setSelected] = useState<GroupLetter[]>([]);
 
-  // Pré-selecionar grupos baseados no dia atual ao carregar
+  // Pré-selecionar grupos baseados no dia atual (Multi-select suportado)
   useEffect(() => {
     const todayIndex = new Date().getDay();
-    const scheduledGroups = Object.entries(state.schedule || {})
-      .filter(([day, group]) => parseInt(day) === todayIndex && group !== null)
-      .map(([_, group]) => group as GroupLetter);
+    // Agora state.schedule[todayIndex] é um array de GroupLetter
+    const scheduledGroups: GroupLetter[] = state.schedule[todayIndex] || [];
     
     if (scheduledGroups.length > 0) {
       setSelected(scheduledGroups);
@@ -24,10 +23,15 @@ export const HomeScreen: React.FC<{ manager: any }> = ({ manager }) => {
   };
 
   const getExerciseCountForGroup = (g: GroupLetter) => {
-    const catsInGroup = state.categories.filter((c: any) => c.groupLetter === g);
-    return state.exercises.filter((e: any) => catsInGroup.some((c: any) => c.id === e.categoryId)).length;
+    // Conta exercícios que pertencem a categorias deste grupo
+    const catsInGroupIds = state.categories.filter((c: any) => c.groupLetter === g).map((c: any) => c.id);
+    // Verifica se exercise.categoryIds contem algum ID desse grupo
+    return state.exercises.filter((e: any) => 
+      e.categoryIds.some((cId: string) => catsInGroupIds.includes(cId))
+    ).length;
   };
 
+  // Categorias ativas baseadas nos grupos selecionados
   const activeCategories = state.categories.filter((c: any) => selected.includes(c.groupLetter));
 
   return (

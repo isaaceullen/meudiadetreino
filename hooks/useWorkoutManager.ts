@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { AppState, WorkoutDraft, GroupLetter, Session, SeriesEntry, Exercise, Category } from '../types';
+import { AppState, WorkoutDraft, GroupLetter, Session, SeriesEntry, Exercise, Category, Schedule } from '../types';
 
 const STORAGE_KEY = 'meutreino_v3_state';
 const DRAFT_KEY = 'meutreino_v3_draft';
@@ -13,15 +13,45 @@ const INITIAL_STATE: AppState = {
     autoTimer: true,
     restTimeSeconds: 60
   },
-  schedule: { 0: null, 1: null, 2: null, 3: null, 4: null, 5: null, 6: null },
+  schedule: { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] },
   logs: [],
   history: []
+};
+
+// Função auxiliar para migrar dados antigos
+const migrateState = (data: any): AppState => {
+  const migrated = { ...data };
+
+  // Migração 1: Agendamento Multi-select (String/Null -> Array)
+  if (migrated.schedule) {
+    Object.keys(migrated.schedule).forEach(key => {
+      const idx = Number(key);
+      const val = migrated.schedule[idx];
+      if (val === null) migrated.schedule[idx] = [];
+      else if (typeof val === 'string') migrated.schedule[idx] = [val];
+      // Se já for array, mantém
+    });
+  } else {
+    migrated.schedule = INITIAL_STATE.schedule;
+  }
+
+  // Migração 2: Exercícios (categoryIds, type, sortOrder)
+  if (migrated.exercises) {
+    migrated.exercises = migrated.exercises.map((ex: any) => ({
+      ...ex,
+      categoryIds: ex.categoryIds || (ex.categoryId ? [ex.categoryId] : []),
+      type: ex.type || 'strength',
+      sortOrder: ex.sortOrder !== undefined ? ex.sortOrder : 0
+    }));
+  }
+
+  return migrated as AppState;
 };
 
 export const useWorkoutManager = () => {
   const [state, setState] = useState<AppState>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : INITIAL_STATE;
+    return saved ? migrateState(JSON.parse(saved)) : INITIAL_STATE;
   });
 
   const [activeDraft, setActiveDraft] = useState<WorkoutDraft | null>(() => {
@@ -89,7 +119,7 @@ export const useWorkoutManager = () => {
     try {
       const importedState = JSON.parse(jsonStr);
       if (importedState.categories && importedState.exercises) {
-        setState(importedState);
+        setState(migrateState(importedState));
         return true;
       }
       return false;
@@ -120,25 +150,35 @@ export const useWorkoutManager = () => {
 
   const startWorkout = (groups: GroupLetter[]) => {
     const categoriesInGroups = state.categories.filter(c => groups.includes(c.groupLetter));
+    // Suporte a categoryIds (array)
     const exercisesInGroups = state.exercises.filter(e => 
-      categoriesInGroups.some(c => c.id === e.categoryId)
+      e.categoryIds.some(cId => categoriesInGroups.some(c => c.id === cId))
     );
 
     const draftExercises: WorkoutDraft['exercises'] = {};
+    const cardioCompleted: WorkoutDraft['cardioCompleted'] = {};
+
     exercisesInGroups.forEach(ex => {
-      const last = getLastSessionData(ex.id);
-      draftExercises[ex.id] = Array.from({ length: ex.defaultSets }).map(() => ({
-        id: crypto.randomUUID(),
-        load: last.load,
-        reps: last.reps,
-        completed: false
-      }));
+      if (ex.type === 'strength') {
+        const last = getLastSessionData(ex.id);
+        draftExercises[ex.id] = Array.from({ length: ex.defaultSets }).map(() => ({
+          id: crypto.randomUUID(),
+          load: last.load,
+          reps: last.reps,
+          completed: false
+        }));
+      } else {
+        // Cardio initialization
+        draftExercises[ex.id] = [];
+        cardioCompleted[ex.id] = false;
+      }
     });
 
     setActiveDraft({
       startTime: Date.now(),
       selectedGroups: groups,
-      exercises: draftExercises
+      exercises: draftExercises,
+      cardioCompleted
     });
   };
 
@@ -170,6 +210,19 @@ export const useWorkoutManager = () => {
     });
   };
 
+  const markCardioComplete = (exerciseId: string, completed: boolean) => {
+    setActiveDraft(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        cardioCompleted: {
+          ...prev.cardioCompleted,
+          [exerciseId]: completed
+        }
+      };
+    });
+  };
+
   const finishWorkout = (notes: string) => {
     if (!activeDraft) return;
 
@@ -180,20 +233,43 @@ export const useWorkoutManager = () => {
     let totalSeriesCount = 0;
     const details: Session['details'] = [];
 
+    // Process Strength
     Object.entries(activeDraft.exercises).forEach(([exId, series]) => {
-      const completedSeries = (series as SeriesEntry[]).filter(s => s.completed);
-      if (completedSeries.length > 0) {
-        const ex = state.exercises.find(e => e.id === exId);
-        totalSeriesCount += completedSeries.length;
-        completedSeries.forEach(s => totalVolume += (s.load * s.reps));
-        
-        details.push({
-          exerciseId: exId,
-          exerciseName: ex?.name || 'Exercício Excluído',
-          series: completedSeries.map(s => ({ load: s.load, reps: s.reps }))
-        });
-      }
+      const ex = state.exercises.find(e => e.id === exId);
+      if (!ex) return;
+
+      if (ex.type === 'strength') {
+        const completedSeries = (series as SeriesEntry[]).filter(s => s.completed);
+        if (completedSeries.length > 0) {
+          totalSeriesCount += completedSeries.length;
+          completedSeries.forEach(s => totalVolume += (s.load * s.reps));
+          
+          details.push({
+            exerciseId: exId,
+            exerciseName: ex.name,
+            type: 'strength',
+            series: completedSeries.map(s => ({ load: s.load, reps: s.reps }))
+          });
+        }
+      } 
     });
+
+    // Process Cardio
+    if (activeDraft.cardioCompleted) {
+      Object.entries(activeDraft.cardioCompleted).forEach(([exId, completed]) => {
+         if (completed) {
+           const ex = state.exercises.find(e => e.id === exId);
+           if (ex) {
+             details.push({
+               exerciseId: exId,
+               exerciseName: ex.name,
+               type: 'cardio',
+               series: [] // No series for cardio
+             });
+           }
+         }
+      });
+    }
 
     const newSession: Session = {
       id: crypto.randomUUID(),
@@ -234,12 +310,20 @@ export const useWorkoutManager = () => {
     setState((prev: AppState) => ({
       ...prev,
       categories: prev.categories.filter(c => c.id !== id),
-      exercises: prev.exercises.filter(e => e.categoryId !== id)
+      // Remove da lista de categorias dos exercícios. Se ficar vazio, o exercício fica "órfão" mas não deletado.
+      exercises: prev.exercises.map(e => ({
+        ...e,
+        categoryIds: e.categoryIds.filter(cid => cid !== id)
+      }))
     }));
   };
 
   const addExercise = (ex: Omit<Exercise, 'id'>) => {
-    setState(prev => ({ ...prev, exercises: [...prev.exercises, { ...ex, id: crypto.randomUUID() }] }));
+    const maxSort = Math.max(0, ...state.exercises.map(e => e.sortOrder));
+    setState(prev => ({ 
+      ...prev, 
+      exercises: [...prev.exercises, { ...ex, id: crypto.randomUUID(), sortOrder: maxSort + 1 }] 
+    }));
   };
 
   const updateExercise = (id: string, updates: Partial<Exercise>) => {
@@ -247,6 +331,21 @@ export const useWorkoutManager = () => {
       ...prev,
       exercises: prev.exercises.map(e => e.id === id ? { ...e, ...updates } : e)
     }));
+  };
+
+  // Função para reordenar em lote
+  const reorderExercises = (orderedIds: string[]) => {
+    setState(prev => {
+      const newExercises = prev.exercises.map(ex => {
+        const newIndex = orderedIds.indexOf(ex.id);
+        if (newIndex !== -1) {
+          // Se o exercício está na lista ordenada, atualiza seu sortOrder
+          return { ...ex, sortOrder: newIndex };
+        }
+        return ex; // Se não estiver na lista, mantém
+      });
+      return { ...prev, exercises: newExercises };
+    });
   };
 
   const removeExercise = (id: string) => {
@@ -260,6 +359,7 @@ export const useWorkoutManager = () => {
     startWorkout,
     updateSeries,
     updateAllSeries,
+    markCardioComplete,
     finishWorkout,
     removeSession,
     cancelWorkout: () => setActiveDraft(null),
@@ -268,6 +368,7 @@ export const useWorkoutManager = () => {
     removeCategory,
     addExercise,
     updateExercise,
+    reorderExercises,
     removeExercise,
     exportData,
     importData,

@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Plus, Search, Trash2, Edit2, Link2, Info, X, Check, Filter, SlidersHorizontal } from 'lucide-react';
+import { Plus, Search, Trash2, Edit2, Link2, Info, X, Check, Filter, SlidersHorizontal, Activity, Dumbbell } from 'lucide-react';
 import { Exercise, GROUPS, GroupLetter } from '../types';
 
 export const ExercisesScreen: React.FC<{ manager: any }> = ({ manager }) => {
@@ -14,9 +14,11 @@ export const ExercisesScreen: React.FC<{ manager: any }> = ({ manager }) => {
   const [selectedGroups, setSelectedGroups] = useState<GroupLetter[]>([]);
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
 
-  const [formData, setFormData] = useState<Omit<Exercise, 'id'>>({
+  // State do Formulário
+  const [formData, setFormData] = useState<Omit<Exercise, 'id' | 'sortOrder'>>({
     name: '',
-    categoryId: state.categories[0]?.id || '',
+    categoryIds: [],
+    type: 'strength',
     defaultSets: 3,
     defaultReps: 10,
     initialLoad: 0,
@@ -26,7 +28,7 @@ export const ExercisesScreen: React.FC<{ manager: any }> = ({ manager }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.categoryId) return showDialog('alert', 'Atenção', 'Cadastre uma categoria antes de adicionar exercícios.');
+    if (formData.categoryIds.length === 0) return showDialog('alert', 'Atenção', 'Selecione pelo menos uma categoria.');
     
     if (editingId) {
       updateExercise(editingId, formData);
@@ -42,7 +44,8 @@ export const ExercisesScreen: React.FC<{ manager: any }> = ({ manager }) => {
       setEditingId(ex.id);
       setFormData({
         name: ex.name,
-        categoryId: ex.categoryId,
+        categoryIds: ex.categoryIds || (ex.categoryId ? [ex.categoryId] : []),
+        type: ex.type || 'strength',
         defaultSets: ex.defaultSets,
         defaultReps: ex.defaultReps,
         initialLoad: ex.initialLoad,
@@ -53,7 +56,8 @@ export const ExercisesScreen: React.FC<{ manager: any }> = ({ manager }) => {
       setEditingId(null);
       setFormData({
         name: '',
-        categoryId: state.categories[0]?.id || '',
+        categoryIds: state.categories[0] ? [state.categories[0].id] : [],
+        type: 'strength',
         defaultSets: 3,
         defaultReps: 10,
         initialLoad: 0,
@@ -62,6 +66,16 @@ export const ExercisesScreen: React.FC<{ manager: any }> = ({ manager }) => {
       });
     }
     setIsModalOpen(true);
+  };
+
+  const toggleCategorySelection = (catId: string) => {
+    setFormData(prev => {
+      if (prev.categoryIds.includes(catId)) {
+        return { ...prev, categoryIds: prev.categoryIds.filter(id => id !== catId) };
+      } else {
+        return { ...prev, categoryIds: [...prev.categoryIds, catId] };
+      }
+    });
   };
 
   const closeModal = () => {
@@ -88,11 +102,23 @@ export const ExercisesScreen: React.FC<{ manager: any }> = ({ manager }) => {
     setSearch('');
   };
 
+  // Lógica de Filtro Atualizada para categoryIds
   const filtered = state.exercises.filter((ex: Exercise) => {
-    const cat = state.categories.find((c: any) => c.id === ex.categoryId);
+    const exCatIds = ex.categoryIds || (ex.categoryId ? [ex.categoryId] : []);
+    
+    // Check Search
     const matchesSearch = ex.name.toLowerCase().includes(search.toLowerCase());
-    const matchesGroup = selectedGroups.length === 0 || (cat && selectedGroups.includes(cat.groupLetter));
-    const matchesCat = selectedCats.length === 0 || selectedCats.includes(ex.categoryId);
+    
+    // Check Groups (Se qualquer categoria do exercício pertencer a um grupo selecionado)
+    const exGroups = state.categories
+      .filter((c: any) => exCatIds.includes(c.id))
+      .map((c: any) => c.groupLetter);
+      
+    const matchesGroup = selectedGroups.length === 0 || exGroups.some((g: any) => selectedGroups.includes(g));
+
+    // Check Specific Categories
+    const matchesCat = selectedCats.length === 0 || exCatIds.some(id => selectedCats.includes(id));
+
     return matchesSearch && matchesGroup && matchesCat;
   });
 
@@ -140,17 +166,24 @@ export const ExercisesScreen: React.FC<{ manager: any }> = ({ manager }) => {
 
       <div className="space-y-4 pb-20">
         {filtered.map((ex: Exercise) => {
-          const cat = state.categories.find((c: any) => c.id === ex.categoryId);
+          const catIds = ex.categoryIds || (ex.categoryId ? [ex.categoryId] : []);
+          const cats = state.categories.filter((c: any) => catIds.includes(c.id));
+          
           return (
             <div key={ex.id} className="bg-zinc-900 border border-zinc-800 p-6 rounded-[2.5rem] flex justify-between items-center group transition-all hover:border-zinc-700">
               <div className="max-w-[70%]">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest">{cat?.name || 'S/ CAT'}</span>
-                  <span className="w-1 h-1 bg-zinc-700 rounded-full" />
-                  <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">Grupo {cat?.groupLetter}</span>
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  {ex.type === 'cardio' && <span className="text-[8px] bg-pink-500/20 text-pink-500 font-black px-1.5 py-0.5 rounded uppercase">Cardio</span>}
+                  {cats.map((c: any) => (
+                    <span key={c.id} className="text-[9px] font-black text-zinc-500 uppercase tracking-widest bg-zinc-800 px-1.5 py-0.5 rounded">
+                      {c.name} ({c.groupLetter})
+                    </span>
+                  ))}
                 </div>
                 <h4 className="text-lg font-black italic uppercase text-white leading-tight">{ex.name}</h4>
-                <p className="text-[10px] font-bold text-zinc-500 uppercase mt-1">{ex.defaultSets}x{ex.defaultReps} • {ex.initialLoad}kg</p>
+                {ex.type === 'strength' && (
+                  <p className="text-[10px] font-bold text-zinc-500 uppercase mt-1">{ex.defaultSets}x{ex.defaultReps} • {ex.initialLoad}kg</p>
+                )}
               </div>
               <div className="flex gap-1">
                 <button onClick={() => openModal(ex)} className="p-3 text-zinc-500 hover:text-white transition-colors">
@@ -251,48 +284,77 @@ export const ExercisesScreen: React.FC<{ manager: any }> = ({ manager }) => {
       {/* MODAL DE ADIÇÃO/EDIÇÃO */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black z-[100] animate-in slide-in-from-bottom duration-300 overflow-y-auto">
-          <div className="p-8 pb-20 max-w-lg mx-auto">
+          <div className="p-8 pb-32 max-w-lg mx-auto">
             <header className="flex justify-between items-center mb-10">
               <h3 className="text-2xl font-black italic uppercase">{editingId ? 'Editar' : 'Novo'} Exercício</h3>
               <button onClick={closeModal} className="bg-zinc-900 p-4 rounded-2xl text-zinc-500"><X size={24} /></button>
             </header>
 
             <form onSubmit={handleSubmit} className="space-y-8">
+              {/* TIPO */}
+              <div className="grid grid-cols-2 gap-3 p-1 bg-zinc-900 rounded-[2rem]">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, type: 'strength' })}
+                  className={`py-4 rounded-[1.5rem] font-black uppercase text-xs tracking-widest flex items-center justify-center gap-2 transition-all ${formData.type === 'strength' ? 'bg-zinc-800 text-white shadow-lg' : 'text-zinc-600'}`}
+                >
+                  <Dumbbell size={16} /> Força
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, type: 'cardio' })}
+                  className={`py-4 rounded-[1.5rem] font-black uppercase text-xs tracking-widest flex items-center justify-center gap-2 transition-all ${formData.type === 'cardio' ? 'bg-zinc-800 text-pink-500 shadow-lg' : 'text-zinc-600'}`}
+                >
+                  <Activity size={16} /> Cardio
+                </button>
+              </div>
+
               <div className="space-y-3">
                 <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Identificação</label>
                 <input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-zinc-900 border border-zinc-800 rounded-3xl p-5 outline-none focus:ring-2 ring-blue-500 transition-all" placeholder="Nome do Exercício" />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Categoria</label>
-                  <select 
-                    value={formData.categoryId} 
-                    onChange={e => setFormData({...formData, categoryId: e.target.value})}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-3xl p-5 outline-none appearance-none"
-                  >
-                    {state.categories.map((c: any) => (
-                      <option key={c.id} value={c.id}>{c.name} ({c.groupLetter})</option>
-                    ))}
-                    {state.categories.length === 0 && <option disabled>Crie uma categoria primeiro</option>}
-                  </select>
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Categorias (Multi-seleção)</label>
+                <div className="flex flex-wrap gap-2">
+                  {state.categories.map((c: any) => {
+                    const isSelected = formData.categoryIds.includes(c.id);
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => toggleCategorySelection(c.id)}
+                        className={`px-4 py-3 rounded-2xl text-[10px] font-black uppercase border transition-all ${isSelected ? 'bg-blue-600 border-blue-500 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-500'}`}
+                      >
+                        {c.name} ({c.groupLetter})
+                      </button>
+                    )
+                  })}
                 </div>
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Carga Inicial</label>
-                  <input type="number" value={formData.initialLoad} onChange={e => setFormData({...formData, initialLoad: Number(e.target.value)})} className="w-full bg-zinc-900 border border-zinc-800 rounded-3xl p-5 text-center" />
-                </div>
+                {state.categories.length === 0 && <p className="text-zinc-600 text-xs italic">Crie categorias primeiro.</p>}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-3 text-center">
-                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Séries Padrão</label>
-                  <input type="number" value={formData.defaultSets} onChange={e => setFormData({...formData, defaultSets: Number(e.target.value)})} className="w-full bg-zinc-900 border border-zinc-800 rounded-3xl p-5 text-center" />
-                </div>
-                <div className="space-y-3 text-center">
-                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Reps Padrão</label>
-                  <input type="number" value={formData.defaultReps} onChange={e => setFormData({...formData, defaultReps: Number(e.target.value)})} className="w-full bg-zinc-900 border border-zinc-800 rounded-3xl p-5 text-center" />
-                </div>
-              </div>
+              {formData.type === 'strength' && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Carga Inicial</label>
+                      <input type="number" value={formData.initialLoad} onChange={e => setFormData({...formData, initialLoad: Number(e.target.value)})} className="w-full bg-zinc-900 border border-zinc-800 rounded-3xl p-5 text-center" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-3 text-center">
+                      <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Séries Padrão</label>
+                      <input type="number" value={formData.defaultSets} onChange={e => setFormData({...formData, defaultSets: Number(e.target.value)})} className="w-full bg-zinc-900 border border-zinc-800 rounded-3xl p-5 text-center" />
+                    </div>
+                    <div className="space-y-3 text-center">
+                      <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Reps Padrão</label>
+                      <input type="number" value={formData.defaultReps} onChange={e => setFormData({...formData, defaultReps: Number(e.target.value)})} className="w-full bg-zinc-900 border border-zinc-800 rounded-3xl p-5 text-center" />
+                    </div>
+                  </div>
+                </>
+              )}
 
               <div className="space-y-3">
                 <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1 flex items-center gap-2"><Link2 size={14} className="text-blue-500"/> Link YouTube/Execução</label>

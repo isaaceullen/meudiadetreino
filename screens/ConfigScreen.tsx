@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { Plus, Trash2, ShieldAlert, LayoutGrid, Timer, Database, Download, Upload, Edit2, X, Check, Calendar } from 'lucide-react';
+import { Plus, Trash2, ShieldAlert, Timer, Database, Download, Upload, Edit2, X, Check, Calendar } from 'lucide-react';
 import { GROUPS, GroupLetter, DAY_NAMES } from '../types';
 
 export const ConfigScreen: React.FC<{ manager: any }> = ({ manager }) => {
@@ -27,28 +27,24 @@ export const ConfigScreen: React.FC<{ manager: any }> = ({ manager }) => {
     setCatGroup(cat.groupLetter);
   };
 
-  const handleDayChange = (group: GroupLetter, dayIndex: string) => {
-    const val = dayIndex === "null" ? null : parseInt(dayIndex);
+  // Agendamento Múltiplo
+  const toggleSchedule = (dayIdx: number, group: GroupLetter) => {
+    const currentSchedule = state.schedule[dayIdx] || [];
+    let newDaySchedule;
     
-    // Atualiza o agendamento no estado
-    const newSchedule = { ...state.schedule };
-    
-    // Remove este grupo de qualquer dia que ele já esteja
-    Object.keys(newSchedule).forEach((day: any) => {
-      if (newSchedule[day] === group) newSchedule[day] = null;
-    });
-    
-    // Se o novo valor for um dia, atribui o grupo a ele
-    if (val !== null) {
-      newSchedule[val] = group;
+    if (currentSchedule.includes(group)) {
+      newDaySchedule = currentSchedule.filter((g: string) => g !== group);
+    } else {
+      newDaySchedule = [...currentSchedule, group].sort(); // Mantém ordem alfabética
     }
-    
-    setState((prev: any) => ({ ...prev, schedule: newSchedule }));
-  };
 
-  const getDayForGroup = (group: GroupLetter) => {
-    const day = Object.keys(state.schedule).find(key => state.schedule[parseInt(key)] === group);
-    return day !== undefined ? day : "null";
+    setState((prev: any) => ({
+      ...prev,
+      schedule: {
+        ...prev.schedule,
+        [dayIdx]: newDaySchedule
+      }
+    }));
   };
 
   const handleImportClick = () => {
@@ -80,7 +76,7 @@ export const ConfigScreen: React.FC<{ manager: any }> = ({ manager }) => {
         exercises: [], 
         sessions: [], 
         settings: { autoTimer: true, restTimeSeconds: 60 },
-        schedule: { 0: null, 1: null, 2: null, 3: null, 4: null, 5: null, 6: null },
+        schedule: { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] },
         logs: [],
         history: []
       });
@@ -88,7 +84,7 @@ export const ConfigScreen: React.FC<{ manager: any }> = ({ manager }) => {
   };
 
   const handleRemoveCat = async (id: string) => {
-    const confirm = await showDialog('confirm', 'Excluir Categoria?', 'Isso também removerá todos os exercícios vinculados a ela.');
+    const confirm = await showDialog('confirm', 'Excluir Categoria?', 'Isso também removerá a associação desta categoria nos exercícios.');
     if (confirm) removeCategory(id);
   };
 
@@ -106,28 +102,39 @@ export const ConfigScreen: React.FC<{ manager: any }> = ({ manager }) => {
             <button className="text-zinc-600"><X size={20} /></button>
           </div>
 
-          {/* AGENDAMENTO DE GRUPOS */}
+          {/* AGENDAMENTO DE GRUPOS GRID */}
           <div className="bg-zinc-900/50 border border-zinc-800 rounded-3xl p-5 space-y-4">
-            <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-[0.2em] mb-4">Agendamento de Grupos</h4>
-            <div className="grid grid-cols-2 gap-4">
-              {GROUPS.map(g => (
-                <div key={g} className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-zinc-800 rounded-lg flex items-center justify-center font-black text-xs text-zinc-400">
-                    {g}
+            <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-[0.2em] mb-4">Agendamento Semanal</h4>
+            <div className="space-y-3">
+              {Object.entries(DAY_NAMES).map(([idxStr, name]) => {
+                const idx = parseInt(idxStr);
+                const activeGroups = state.schedule[idx] || [];
+                return (
+                  <div key={idx} className="flex items-center justify-between border-b border-zinc-800 pb-2 last:border-0">
+                    <span className="text-xs font-bold text-zinc-400 w-20">{name.split('-')[0]}</span>
+                    <div className="flex gap-1">
+                      {GROUPS.map(g => {
+                        const isActive = activeGroups.includes(g);
+                        return (
+                          <button
+                            key={g}
+                            onClick={() => toggleSchedule(idx, g)}
+                            className={`w-7 h-7 rounded-lg text-[10px] font-black transition-all ${
+                              isActive 
+                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20' 
+                                : 'bg-zinc-800 text-zinc-600 hover:bg-zinc-700'
+                            }`}
+                          >
+                            {g}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <select 
-                    value={getDayForGroup(g)}
-                    onChange={(e) => handleDayChange(g, e.target.value)}
-                    className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg py-2 px-3 text-xs text-white outline-none appearance-none"
-                  >
-                    <option value="null">Sem dia fixo</option>
-                    {Object.entries(DAY_NAMES).map(([idx, name]) => (
-                      <option key={idx} value={idx}>{name.split('-')[0]}</option>
-                    ))}
-                  </select>
-                </div>
-              ))}
+                );
+              })}
             </div>
+            <p className="text-[9px] text-zinc-600 text-center pt-2">Selecione múltiplos grupos por dia.</p>
           </div>
 
           {/* ADD CATEGORIA */}
